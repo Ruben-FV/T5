@@ -1,0 +1,354 @@
+---
+title: "T5: Trip Assignment"
+author: "Abraham Majluf, Izzy Tice, Rubén Figueroa"
+format: html
+editor: visual
+---
+
+## T5: Trip Assignment
+
+## Load Libraries:
+
+```{r, message=FALSE, warning=FALSE}
+library(tidyverse)
+library(sf)
+library(here)
+library(maptiles)
+library(tidyterra)
+library(knitr)
+library(tigris)
+```
+
+## Highway Volumes Analysis:
+
+Prepare data:
+
+```{r, message=FALSE, warning=FALSE}
+# Load highway network:
+all_roads <- here("model",
+                  "inputs",
+                  "networks",
+                  "tdm23.1.0",
+                  "2019",
+                  "hwy.geojson") |>
+  st_read()
+
+# Load model results:
+am_hwy_flows_base <- here("model",
+                     "inputs",      
+                     "outputs",
+                     "Base",
+                     "_assignment",
+                     "highway",
+                     "flows_am.csv") |>
+  read_csv() |>
+  rename(ID = ID1,
+         base_flow = Tot_Flow_PCE) |>
+  select(ID, base_flow)
+
+am_hwy_flows_alt <- here("model",
+                     "inputs",
+                     "outputs",
+                     "Alternative",
+                     "_assignment",
+                     "highway",
+                     "flows_am.csv") |>
+  read_csv() |>
+  rename(ID = ID1,
+         alt_flow = Tot_Flow_PCE) |>
+  select(ID, alt_flow)
+
+```
+
+State view:
+
+```{r, message=FALSE, warning=FALSE}
+# Results comparison:
+link_vols_compare <- inner_join(all_roads, am_hwy_flows_base) |>
+  left_join(am_hwy_flows_alt) |>
+  replace_na(list(alt_flow = 0)) |>
+  mutate(flow_diff = alt_flow - base_flow) 
+
+trip_increases <- link_vols_compare |>
+  filter(flow_diff > 50 & flow_diff/base_flow  > 0.10) # We only consider >10% increases
+
+trip_decreases <- link_vols_compare |>
+  filter(flow_diff < -50 & flow_diff/base_flow < -0.10) |> # We only consider >10% decreases
+  mutate(flow_diff = -1 * flow_diff)
+
+# Visualization:
+# State view:
+base_map <- get_tiles(link_vols_compare,
+                      provider = "CartoDB.Positron",
+                      zoom = 10,
+                      crop = TRUE)
+
+ggplot(trip_increases) +
+  geom_spatraster_rgb(data =base_map) +
+  geom_sf(aes(color = flow_diff),
+          linewidth = 1) +
+  scale_color_viridis_c(transform = "log2",
+                        direction = -1,
+                        name = "Increase in morning\npeak traffic volumes (MA)") +
+  theme_void()
+
+ggplot(trip_decreases) +
+  geom_spatraster_rgb(data =base_map) +
+  geom_sf(aes(color = flow_diff),
+          linewidth = 1) +
+  scale_color_viridis_c(transform = "log2",
+                        direction = -1,
+                        name = "Decrease in morning\npeak traffic volumes (MA)") +
+  theme_void()
+```
+
+10 km from Boston Center:
+
+```{r, message=FALSE, warning=FALSE}
+# Results comparison:
+link_vols_compare <- inner_join(all_roads, am_hwy_flows_base) |>
+  left_join(am_hwy_flows_alt) |>
+  replace_na(list(alt_flow = 0)) |>
+  mutate(flow_diff = alt_flow - base_flow) 
+
+boston_vicinity <- tibble(lat = 42.35843, 
+                                  lon = -71.05977) |>
+  st_as_sf(coords = c("lon", "lat"), crs = "WGS84") |>
+  st_transform(26986) |>
+  st_buffer(dist = 10000)
+
+link_vols_compare <- link_vols_compare |>
+  st_transform(26986) |>
+  st_filter(boston_vicinity)
+
+trip_increases <- link_vols_compare |>
+  filter(flow_diff > 50 & flow_diff/base_flow > 0.10) # We consider >10% increases
+
+trip_decreases <- link_vols_compare |>
+  filter(flow_diff < -50 & flow_diff/base_flow < -0.10) |> # We consider >10% decreases
+  mutate(flow_diff = -1 * flow_diff)
+
+# Visualization:
+# State view:
+base_map <- get_tiles(link_vols_compare,
+                      provider = "CartoDB.Positron",
+                      zoom = 11,
+                      crop = TRUE)
+
+ggplot(trip_increases) +
+  geom_spatraster_rgb(data =base_map) +
+  geom_sf(aes(color = flow_diff),
+          linewidth = 1) +
+  scale_color_viridis_c(transform = "log2",
+                        direction = -1,
+                        name = "Increase in morning\npeak traffic volumes (10 km - Boston)") +
+  theme_void()
+
+ggplot(trip_decreases) +
+  geom_spatraster_rgb(data =base_map) +
+  geom_sf(aes(color = flow_diff),
+          linewidth = 1) +
+  scale_color_viridis_c(transform = "log2",
+                        direction = -1,
+                        name = "Decrease in morning\npeak traffic volumes (10 km - Boston)") +
+  theme_void()
+```
+
+5 km from Boston Center:
+
+```{r, message=FALSE, warning=FALSE}
+# Results comparison:
+link_vols_compare <- inner_join(all_roads, am_hwy_flows_base) |>
+  left_join(am_hwy_flows_alt) |>
+  replace_na(list(alt_flow = 0)) |>
+  mutate(flow_diff = alt_flow - base_flow) 
+
+boston_vicinity <- tibble(lat = 42.35843, 
+                                  lon = -71.05977) |>
+  st_as_sf(coords = c("lon", "lat"), crs = "WGS84") |>
+  st_transform(26986) |>
+  st_buffer(dist = 5000)
+
+link_vols_compare <- link_vols_compare |>
+  st_transform(26986) |>
+  st_filter(boston_vicinity)
+
+trip_increases <- link_vols_compare |>
+  filter(flow_diff > 50 & flow_diff/base_flow > 0.10) # We consider >10% increases
+
+trip_decreases <- link_vols_compare |>
+  filter(flow_diff < -50 & flow_diff/base_flow < -0.10) |> # We consider >10% decreases
+  mutate(flow_diff = -1 * flow_diff)
+
+# Visualization:
+# State view:
+base_map <- get_tiles(link_vols_compare,
+                      provider = "CartoDB.Positron",
+                      zoom = 11,
+                      crop = TRUE)
+
+ggplot(trip_increases) +
+  geom_spatraster_rgb(data =base_map) +
+  geom_sf(aes(color = flow_diff),
+          linewidth = 1) +
+  scale_color_viridis_c(transform = "log2",
+                        direction = -1,
+                        name = "Increase in morning\npeak traffic volumes (5 km - Boston)") +
+  theme_void()
+
+ggplot(trip_decreases) +
+  geom_spatraster_rgb(data =base_map) +
+  geom_sf(aes(color = flow_diff),
+          linewidth = 1) +
+  scale_color_viridis_c(transform = "log2",
+                        direction = -1,
+                        name = "Decrease in morning\npeak traffic volumes (5 km - Boston)") +
+  theme_void()
+```
+
+## Transit Ridership:
+
+Prepare data for AM:
+
+```{r, message=FALSE, warning=FALSE}
+# Load transit stops:
+stop_locs <- here("model",
+                  "inputs",
+                  "networks",
+                  "tdm23.1.0",
+                  "2019",
+                  "stops.geojson") |>
+  st_read()
+
+# Load model results:
+base_onoff <- here("model",
+                   "inputs",
+                   "outputs",
+                   "Base",
+                   "_assignment",
+                   "transit",
+                   "onoff_tw_am.csv") |>
+  read_csv(show_col_types = FALSE) |>
+  select(STOP, On, Off) |>
+  rename(base_on = On,
+         base_off = Off,
+         ID = STOP)
+
+alt_onoff <- here("model",
+                   "inputs",
+                   "outputs",
+                   "Alternative",
+                   "_assignment",
+                   "transit",
+                   "onoff_tw_am.csv") |>
+  read_csv(show_col_types = FALSE) |>
+  select(STOP, On, Off) |>
+  rename(alt_on = On,
+         alt_off = Off,
+         ID = STOP)
+```
+
+Visualization for AM:
+
+```{r, message=FALSE, warning=FALSE}
+# Results comparison:
+stop_diff <- stop_locs |>
+  inner_join(base_onoff) |>
+  left_join(alt_onoff) |>
+  mutate(base_total = base_on + base_off,
+         alt_total = alt_on + alt_off,
+         diff = alt_total - base_total) |>
+  mutate(abs_diff = abs(diff)) |>
+  arrange(-abs_diff) |>
+  mutate(inc_dec = ifelse(diff < 0, "Decrease", "Increase"))
+
+big_stop_diffs <- stop_diff |>
+  filter(abs_diff > 50)
+
+# Visualization:
+base_map <- get_tiles(big_stop_diffs,
+                      provider = "CartoDB.Positron",
+                      zoom = 13,
+                      crop = TRUE)
+
+ggplot(big_stop_diffs) +
+  geom_spatraster_rgb(data = base_map) +
+  geom_sf(aes(size = abs_diff,
+              color = inc_dec),
+          alpha = 0.3) +
+  scale_size(name = "Magnitude of change") +
+  scale_color_manual(name = "Direction of change",
+                     values = c("orange", "steelblue"),
+                     labels = c("Decrease",
+                                "Increase")) +
+  theme_void()
+```
+
+Prepare data for PM:
+
+```{r, message=FALSE, warning=FALSE}
+# Load model results:
+base_onoff <- here("model",
+                   "inputs",
+                   "outputs",
+                   "Base",
+                   "_assignment",
+                   "transit",
+                   "onoff_tw_pm.csv") |>
+  read_csv(show_col_types = FALSE) |>
+  select(STOP, On, Off) |>
+  rename(base_on = On,
+         base_off = Off,
+         ID = STOP)
+
+alt_onoff <- here("model",
+                   "inputs",
+                   "outputs",
+                   "Alternative",
+                   "_assignment",
+                   "transit",
+                   "onoff_tw_pm.csv") |>
+  read_csv(show_col_types = FALSE) |>
+  select(STOP, On, Off) |>
+  rename(alt_on = On,
+         alt_off = Off,
+         ID = STOP)
+```
+
+Visualization for PM:
+
+```{r, message=FALSE, warning=FALSE}
+# Results comparison:
+stop_diff <- stop_locs |>
+  inner_join(base_onoff) |>
+  left_join(alt_onoff) |>
+  mutate(base_total = base_on + base_off,
+         alt_total = alt_on + alt_off,
+         diff = alt_total - base_total) |>
+  mutate(abs_diff = abs(diff)) |>
+  arrange(-abs_diff) |>
+  mutate(inc_dec = ifelse(diff < 0, "Decrease", "Increase"))
+
+big_stop_diffs <- stop_diff |>
+  filter(abs_diff > 50)
+
+# Visualization:
+base_map <- get_tiles(big_stop_diffs,
+                      provider = "CartoDB.Positron",
+                      zoom = 13,
+                      crop = TRUE)
+
+ggplot(big_stop_diffs) +
+  geom_spatraster_rgb(data = base_map) +
+  geom_sf(aes(size = abs_diff,
+              color = inc_dec),
+          alpha = 0.3) +
+  scale_size(name = "Magnitude of change") +
+  scale_color_manual(name = "Direction of change",
+                     values = c("orange", "steelblue"),
+                     labels = c("Decrease",
+                                "Increase")) +
+  theme_void()
+```
+
+End of project.
